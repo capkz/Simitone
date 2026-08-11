@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-ios</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Simitone.iOS</RootNamespace>
+    <AssemblyName>Simitone</AssemblyName>
+    <!-- Suppress NU1605 (package downgrade) errors from FreeSO submodule dependencies,
+         same as Simitone.Desktop / Simitone.Windows. -->
+    <NoWarn>$(NoWarn);NU1605</NoWarn>
+
+    <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+    <MtouchLink>SdkOnly</MtouchLink>
+    <RuntimeIdentifiers>ios-arm64;iossimulator-arm64;iossimulator-x64</RuntimeIdentifiers>
+
+    <!-- Not code-signed / not packaged for distribution by default - this is a dev
+         scaffold. Signing/provisioning is a per-developer, per-Apple-account concern
+         handled outside this csproj (Xcode-managed signing, or a manual profile). -->
+    <CodesignKey Condition="'$(Configuration)' == 'Debug'"></CodesignKey>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MonoGame.Framework.iOS" Version="3.8.4" />
+    <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\FreeSO\Other\libs\MSDFData\MSDFData.csproj" />
+    <ProjectReference Include="..\..\..\FreeSO\TSOClient\FSO.SimAntics.JIT\FSO.SimAntics.JIT.csproj" />
+    <ProjectReference Include="..\..\..\FreeSO\TSOClient\FSO.UI\FSO.UI.csproj" />
+    <ProjectReference Include="..\..\..\FreeSO\TSOClient\tso.client\FSO.Client.csproj" />
+    <ProjectReference Include="..\..\..\FreeSO\TSOClient\tso.common\FSO.Common.csproj" />
+    <ProjectReference Include="..\..\..\FreeSO\TSOClient\tso.files\FSO.Files.csproj" />
+    <ProjectReference Include="..\..\..\FreeSO\TSOClient\tso.simantics\FSO.SimAntics.csproj" />
+    <ProjectReference Include="..\..\..\FreeSO\TSOClient\tso.world\FSO.LotView.csproj" />
+    <ProjectReference Include="..\Simitone.Client\Simitone.Client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Info.plist" />
+  </ItemGroup>
+
+</Project>
