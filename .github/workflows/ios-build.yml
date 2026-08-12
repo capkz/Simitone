@@ -58,11 +58,19 @@ jobs:
       # Simitone.iOS.csproj now references pre-built DLLs (HintPath) rather
       # than ProjectReference, so build those first as ordinary net9.0
       # assemblies, matching what FreeSO's old FSO.iOS.csproj actually did.
-      - name: Build shared libraries (plain net9.0, no RID)
+      # -r osx-arm64 (a normal desktop RID, unrelated to the mobile-RID
+      # NETSDK1203 issue elsewhere in this file) is required here: Eto.Forms'
+      # Mac backend (Eto.Platform.Mac64, pulled in by Simitone.Desktop.csproj
+      # on macOS) fails its own build target with "No RuntimeIdentifiers or
+      # MacRuntimeIdentifiers have been specified" without one - confirmed by
+      # a real CI failure switching from Simitone.Client to Simitone.Desktop.
+      - name: Build shared libraries (net9.0, osx-arm64)
         run: >
           dotnet build Client/Simitone/Simitone.Desktop/Simitone.Desktop.csproj
           -c Debug
           -f net9.0
+          -r osx-arm64
+          -p:AppendRuntimeIdentifierToOutputPath=false
 
       # No signing needed for a simulator build - this alone answers the
       # question "does Simitone.iOS actually compile", which is the thing
@@ -99,11 +107,19 @@ jobs:
       - name: Install .NET iOS workload
         run: dotnet workload install ios
 
-      - name: Build shared libraries (plain net9.0, no RID)
+      # -r osx-arm64 (a normal desktop RID, unrelated to the mobile-RID
+      # NETSDK1203 issue elsewhere in this file) is required here: Eto.Forms'
+      # Mac backend (Eto.Platform.Mac64, pulled in by Simitone.Desktop.csproj
+      # on macOS) fails its own build target with "No RuntimeIdentifiers or
+      # MacRuntimeIdentifiers have been specified" without one - confirmed by
+      # a real CI failure switching from Simitone.Client to Simitone.Desktop.
+      - name: Build shared libraries (net9.0, osx-arm64)
         run: >
           dotnet build Client/Simitone/Simitone.Desktop/Simitone.Desktop.csproj
           -c Debug
           -f net9.0
+          -r osx-arm64
+          -p:AppendRuntimeIdentifierToOutputPath=false
 
       - name: Import signing certificate and provisioning profile
         env:
