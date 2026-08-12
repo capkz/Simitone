@@ -29,10 +29,10 @@
     ProjectReference as part of the same RID-targeted build graph and reject
     plain-net9.0 projects with NETSDK1203 ("Ahead-of-time compilation is not
     supported for the target runtime identifier") - confirmed not fixable
-    from flags/properties on this project alone: --self-contained, then
-    PublishAot=false, then explicit -p:SelfContained=false were each tried
-    against real CI and produced the byte-identical error every time, so
-    none of them were the actual gate.
+    from flags/properties on this project alone: the "self-contained" build
+    flag, then PublishAot=false, then an explicit SelfContained=false
+    property were each tried against real CI and produced the byte-identical
+    error every time, so none of them were the actual gate.
 
     Instead, this mirrors what FreeSO's old (2016-2019) FSO.iOS.csproj
     actually did: build the shared FSO.*/Simitone.Client libraries once as
