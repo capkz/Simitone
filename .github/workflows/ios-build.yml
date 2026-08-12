@@ -1,0 +1,113 @@
+name: iOS Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ios-port-scaffold]
+    paths:
+      - "Client/Simitone/Simitone.iOS/**"
+      - "Client/Simitone/Simitone.Client/**"
+      - "Client/Simitone/Simitone.Shared/**"
+      - ".github/workflows/ios-build.yml"
+
+jobs:
+  build-simulator:
+    name: Build (Simulator, unsigned - compile check)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Install .NET iOS workload
+        run: dotnet workload install ios
+
+      # No signing needed for a simulator build - this alone answers the
+      # question "does Simitone.iOS actually compile", which is the thing
+      # that could not be checked anywhere except a real Mac.
+      - name: Build for iOS Simulator
+        run: >
+          dotnet build Client/Simitone/Simitone.iOS/Simitone.iOS.csproj
+          -c Debug
+          -f net9.0-ios
+          -r iossimulator-arm64
+          --self-contained
+
+  build-device:
+    name: Build & sign (device - installable via sideloading)
+    runs-on: macos-latest
+    needs: build-simulator
+    # Skipped entirely until Apple signing secrets/vars are configured - see
+    # docs/ios-device-signing.md in sims-1-ios-port for what to set up and why.
+    if: ${{ vars.APPLE_TEAM_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Install .NET iOS workload
+        run: dotnet workload install ios
+
+      - name: Import signing certificate and provisioning profile
+        env:
+          CERT_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN_PATH" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          EXISTING_KEYCHAINS=$(security list-keychains -d user | sed 's/[" ]//g')
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
+
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+          echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          PROFILE_UUID=$(security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" | \
+            plutil -extract UUID xml1 -o - - | \
+            sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$PROFILE_DIR/$PROFILE_UUID.mobileprovision"
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+
+      # Property names here (ArchiveOnBuild, CodesignKey, etc.) match current
+      # .NET-for-iOS CI signing conventions but haven't been confirmed against
+      # this exact project - if this step fails, check the actual error first,
+      # the fix is very likely a property name/value mismatch, not anything
+      # structural.
+      - name: Build, sign, and archive IPA
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: >
+          dotnet build Client/Simitone/Simitone.iOS/Simitone.iOS.csproj
+          -c Release
+          -f net9.0-ios
+          -r ios-arm64
+          -p:ArchiveOnBuild=true
+          -p:CodesignKey="Apple Development"
+          -p:CodesignProvision="${{ env.PROFILE_UUID }}"
+          -p:CodesignTeamId="${{ env.APPLE_TEAM_ID }}"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Simitone-iOS
+          path: Client/Simitone/Simitone.iOS/bin/Release/net9.0-ios/ios-arm64/**/*.ipa
+          if-no-files-found: error
