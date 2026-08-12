@@ -15,6 +15,16 @@
     <MtouchLink>SdkOnly</MtouchLink>
     <RuntimeIdentifiers>ios-arm64;iossimulator-arm64;iossimulator-x64</RuntimeIdentifiers>
 
+    <!-- Explicitly off: iOS apps use Mono's AOT toolchain (driven by
+         RuntimeIdentifier/MtouchLink above), not .NET Native AOT
+         (PublishAot/ILCompiler), which genuinely doesn't support any iOS RID
+         at all. Without this, the SDK infers PublishAot=true somewhere in
+         RID resolution and then rejects every plain-net9.0 FSO.* library
+         pulled in via ProjectReference with NETSDK1203, even though none of
+         them are being Native-AOT-compiled - a known SDK quirk, see
+         https://github.com/dotnet/runtime/issues/95958. -->
+    <PublishAot>false</PublishAot>
+
     <!-- Not code-signed / not packaged for distribution by default - this is a dev
          scaffold. Signing/provisioning is a per-developer, per-Apple-account concern
          handled outside this csproj (Xcode-managed signing, or a manual profile). -->
