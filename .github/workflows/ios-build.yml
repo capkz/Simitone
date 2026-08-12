@@ -256,13 +256,75 @@ jobs:
           echo "--- find-identity output ---"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
 
-      - name: Build for device using the self-signed identity
+      # ROUND 2: the first attempt (self-signed cert, no profile at all) got
+      # PAST the "No valid iOS code signing keys found" gate entirely -
+      # dotnet build accepted the self-signed identity by name, no Apple
+      # involvement needed for that check. It then failed on a *different*,
+      # independent gate: "Could not find any available provisioning
+      # profiles for Simitone on iOS." Real Apple profiles are CMS-signed by
+      # Apple's WWDR CA, which we can't forge - but the open question is
+      # whether the *local build-time* check (as opposed to iOS itself at
+      # install time, which we're not touching here) actually verifies that
+      # signature cryptographically, or just reads the plist content and
+      # checks bundle ID / entitlements / embedded cert match. Testing with
+      # a self-signed CMS wrapper (same technique as the cert above - no
+      # Apple ID, no network call to Apple).
+      - name: Generate a self-made provisioning profile (no Apple involved)
+        run: |
+          set -euo pipefail
+          PROFILE_UUID=$(uuidgen)
+          TEAM_ID="0000000000"
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+          echo "TEAM_ID=$TEAM_ID" >> "$GITHUB_ENV"
+
+          CERT_DER_B64=$(openssl x509 -in "$RUNNER_TEMP/cert.pem" -outform DER | base64)
+
+          cat > "$RUNNER_TEMP/profile.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>AppIDName</key><string>Simitone</string>
+            <key>ApplicationIdentifierPrefix</key><array><string>$TEAM_ID</string></array>
+            <key>Platform</key><array><string>iOS</string></array>
+            <key>DeveloperCertificates</key><array><data>$CERT_DER_B64</data></array>
+            <key>Entitlements</key>
+            <dict>
+              <key>application-identifier</key><string>$TEAM_ID.com.simitone.ios</string>
+              <key>get-task-allow</key><true/>
+            </dict>
+            <key>ExpirationDate</key><date>2027-08-12T00:00:00Z</date>
+            <key>Name</key><string>Simitone Self-Signed Experiment</string>
+            <key>ProvisionsAllDevices</key><false/>
+            <key>TeamIdentifier</key><array><string>$TEAM_ID</string></array>
+            <key>TeamName</key><string>Self-Signed Experiment</string>
+            <key>TimeToLive</key><integer>365</integer>
+            <key>UUID</key><string>$PROFILE_UUID</string>
+            <key>Version</key><integer>1</integer>
+          </dict>
+          </plist>
+          PLIST
+
+          openssl cms -sign -signer "$RUNNER_TEMP/cert.pem" -inkey "$RUNNER_TEMP/key.pem" \
+            -nodetach -outform DER -in "$RUNNER_TEMP/profile.plist" \
+            -out "$RUNNER_TEMP/profile.mobileprovision"
+
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$PROFILE_DIR/$PROFILE_UUID.mobileprovision"
+
+          echo "--- what security cms -D makes of it (this is what the build tooling itself calls to read profiles) ---"
+          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" || echo "(security cms -D failed/warned - see above)"
+
+      - name: Build for device using the self-signed identity + profile
         run: >
           dotnet build Client/Simitone/Simitone.iOS/Simitone.iOS.csproj
           -c Release
           -f net9.0-ios
           -r ios-arm64
           -p:CodesignKey="${{ env.CERT_CN }}"
+          -p:CodesignProvision="${{ env.PROFILE_UUID }}"
+          -p:CodesignTeamId="${{ env.TEAM_ID }}"
 
   build-device:
     name: Build & sign (device - installable via sideloading)
