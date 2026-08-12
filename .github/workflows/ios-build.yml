@@ -98,6 +98,84 @@ jobs:
           -f net9.0-ios
           -r iossimulator-arm64
 
+  # EXPERIMENT: does the codesigning requirement come from ArchiveOnBuild's
+  # own packaging step specifically, or from any device-RID (ios-arm64)
+  # build at all? build-device's "Build, sign, and archive IPA" step only
+  # tested the ArchiveOnBuild path. If a plain (non-archived) build produces
+  # an unsigned .app with no signing identity required at all, that .app can
+  # be zipped into a Payload/*.app IPA by hand, entirely sidestepping Apple's
+  # signing requirement in CI - no Apple ID needed anywhere in this
+  # pipeline, only at install/resign time via AltServer (or AltServer-Linux,
+  # which needs no Mac either - see docs/ios-device-signing.md). This job is
+  # independent of build-device and always runs so the answer shows up on
+  # every push regardless of whether APPLE_TEAM_ID is configured.
+  build-device-unsigned-experiment:
+    name: "EXPERIMENT: plain device build without ArchiveOnBuild"
+    runs-on: macos-latest
+    needs: build-simulator
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Select Xcode 26.5 if available
+        continue-on-error: true
+        run: sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Install .NET iOS workload
+        run: dotnet workload install ios
+
+      - name: Build shared libraries (net9.0, osx-arm64)
+        run: >
+          dotnet build Client/Simitone/Simitone.Desktop/Simitone.Desktop.csproj
+          -c Debug
+          -f net9.0
+          -r osx-arm64
+          -p:AppendRuntimeIdentifierToOutputPath=false
+          -p:NoWarn=NU1605
+          -m:1
+
+      # Deliberately no -p:ArchiveOnBuild=true here - just an ordinary build
+      # targeting the device RID, to see whether the codesign requirement is
+      # specific to archive packaging or applies to any ios-arm64 build.
+      - name: Build for device (no archive, no signing property at all)
+        run: >
+          dotnet build Client/Simitone/Simitone.iOS/Simitone.iOS.csproj
+          -c Release
+          -f net9.0-ios
+          -r ios-arm64
+
+      - name: Locate .app bundle and hand-package an IPA
+        if: success()
+        run: |
+          set -euo pipefail
+          APP_DIR=$(find Client/Simitone/Simitone.iOS/bin/Release/net9.0-ios/ios-arm64 -maxdepth 2 -name "*.app" -type d | head -n1)
+          if [ -z "$APP_DIR" ]; then
+            echo "No .app bundle found - build likely produced something else or failed silently."
+            find Client/Simitone/Simitone.iOS/bin/Release/net9.0-ios/ios-arm64 -maxdepth 3 || true
+            exit 1
+          fi
+          echo "Found: $APP_DIR"
+          codesign -dv "$APP_DIR" 2>&1 || echo "(not signed, or codesign couldn't inspect it - expected if the build truly skipped signing)"
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP_DIR" "$RUNNER_TEMP/Payload/"
+          (cd "$RUNNER_TEMP" && zip -r -q Simitone-unsigned.ipa Payload)
+          mkdir -p unsigned-ipa-out
+          mv "$RUNNER_TEMP/Simitone-unsigned.ipa" unsigned-ipa-out/
+
+      - name: Upload unsigned IPA (experimental)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Simitone-iOS-unsigned-experiment
+          path: unsigned-ipa-out/Simitone-unsigned.ipa
+          if-no-files-found: warn
+
   build-device:
     name: Build & sign (device - installable via sideloading)
     runs-on: macos-latest
