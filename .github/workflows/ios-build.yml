@@ -229,7 +229,14 @@ jobs:
           openssl req -x509 -newkey rsa:2048 -keyout "$RUNNER_TEMP/key.pem" \
             -out "$RUNNER_TEMP/cert.pem" -days 365 -nodes \
             -subj "/CN=$CERT_CN" -addext "extendedKeyUsage=codeSigning"
-          openssl pkcs12 -export -out "$RUNNER_TEMP/selfsigned.p12" \
+          # -legacy: OpenSSL 3.x defaults PKCS#12 export to AES-256/PBKDF2,
+          # which macOS's Security framework importer (still expecting the
+          # old RC2/3DES-SHA1 format) rejects with "MAC verification failed
+          # during PKCS12 import (wrong password?)" even with the right
+          # password - confirmed by a real CI failure on this exact step.
+          # -legacy re-enables the old encryption so `security import`
+          # can read it.
+          openssl pkcs12 -export -legacy -out "$RUNNER_TEMP/selfsigned.p12" \
             -inkey "$RUNNER_TEMP/key.pem" -in "$RUNNER_TEMP/cert.pem" \
             -passout pass:temporary
 
