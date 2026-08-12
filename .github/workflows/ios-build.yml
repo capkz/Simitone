@@ -30,17 +30,21 @@ jobs:
       # question "does Simitone.iOS actually compile", which is the thing
       # that could not be checked anywhere except a real Mac.
       #
-      # Deliberately no --self-contained here: AOT/self-contained publishing
-      # is a `dotnet publish` concern. Passing --self-contained to `dotnet
-      # build` made the SDK require AOT support from every plain-net9.0
-      # FSO.* library pulled in via ProjectReference (NETSDK1203), which
-      # they don't have and don't need for a build-only compile check.
+      # -p:SelfContained=false is explicit, not just "omit --self-contained":
+      # dotnet build with -r <RID> on an OutputType=Exe project can default
+      # SelfContained=true implicitly even without the flag, which would
+      # explain why removing --self-contained alone (previous attempt)
+      # produced the identical NETSDK1203 failure on every FSO.* project
+      # reference - the two prior fix attempts (dropping --self-contained,
+      # then PublishAot=false in the csproj) both left this exact same error
+      # unchanged, so neither was reading the property actually gating this.
       - name: Build for iOS Simulator
         run: >
           dotnet build Client/Simitone/Simitone.iOS/Simitone.iOS.csproj
           -c Debug
           -f net9.0-ios
           -r iossimulator-arm64
+          -p:SelfContained=false
 
   build-device:
     name: Build & sign (device - installable via sideloading)
