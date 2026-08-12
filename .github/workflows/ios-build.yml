@@ -19,6 +19,27 @@ jobs:
         with:
           submodules: recursive
 
+      # Diagnostic: the previous run failed with "This version of .NET for
+      # iOS (26.5.9004) requires Xcode 26.5. The current version of Xcode is
+      # 26.6." - i.e. the installed iOS workload pack doesn't match whatever
+      # Xcode xcode-select currently points at. This lists what's actually
+      # on the runner so the next fix (pin Xcode via xcode-select, or pin a
+      # different workload pack version) is based on real data, not a guess.
+      - name: List available Xcode versions
+        run: |
+          ls /Applications | grep -i xcode || true
+          xcodebuild -version || true
+          xcode-select -p || true
+
+      # Best-effort: try to select an Xcode version matching the iOS
+      # workload pack error above. continue-on-error so that even if this
+      # specific version isn't present on the runner, the workflow still
+      # reaches the real build step and reports its actual current error
+      # rather than stopping here uninformatively.
+      - name: Select Xcode 26.5 if available
+        continue-on-error: true
+        run: sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "9.0.x"
