@@ -26,25 +26,31 @@ jobs:
       - name: Install .NET iOS workload
         run: dotnet workload install ios
 
+      # Three flag-only attempts against Simitone.iOS.csproj's own build
+      # (--self-contained removal, PublishAot=false, explicit
+      # -p:SelfContained=false) each produced the byte-identical NETSDK1203
+      # failure on every FSO.* ProjectReference, confirming this isn't
+      # fixable from flags: dotnet build with a mobile RID evaluates every
+      # ProjectReference as part of that RID's build graph and rejects
+      # plain-net9.0 projects outright. Fix is structural instead -
+      # Simitone.iOS.csproj now references pre-built DLLs (HintPath) rather
+      # than ProjectReference, so build those first as ordinary net9.0
+      # assemblies, matching what FreeSO's old FSO.iOS.csproj actually did.
+      - name: Build shared libraries (plain net9.0, no RID)
+        run: >
+          dotnet build Client/Simitone/Simitone.Client/Simitone.Client.csproj
+          -c Debug
+          -f net9.0
+
       # No signing needed for a simulator build - this alone answers the
       # question "does Simitone.iOS actually compile", which is the thing
       # that could not be checked anywhere except a real Mac.
-      #
-      # -p:SelfContained=false is explicit, not just "omit --self-contained":
-      # dotnet build with -r <RID> on an OutputType=Exe project can default
-      # SelfContained=true implicitly even without the flag, which would
-      # explain why removing --self-contained alone (previous attempt)
-      # produced the identical NETSDK1203 failure on every FSO.* project
-      # reference - the two prior fix attempts (dropping --self-contained,
-      # then PublishAot=false in the csproj) both left this exact same error
-      # unchanged, so neither was reading the property actually gating this.
       - name: Build for iOS Simulator
         run: >
           dotnet build Client/Simitone/Simitone.iOS/Simitone.iOS.csproj
           -c Debug
           -f net9.0-ios
           -r iossimulator-arm64
-          -p:SelfContained=false
 
   build-device:
     name: Build & sign (device - installable via sideloading)
@@ -64,6 +70,12 @@ jobs:
 
       - name: Install .NET iOS workload
         run: dotnet workload install ios
+
+      - name: Build shared libraries (plain net9.0, no RID)
+        run: >
+          dotnet build Client/Simitone/Simitone.Client/Simitone.Client.csproj
+          -c Debug
+          -f net9.0
 
       - name: Import signing certificate and provisioning profile
         env:

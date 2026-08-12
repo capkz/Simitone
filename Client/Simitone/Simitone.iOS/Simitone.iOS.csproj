@@ -7,23 +7,10 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>Simitone.iOS</RootNamespace>
     <AssemblyName>Simitone</AssemblyName>
-    <!-- Suppress NU1605 (package downgrade) errors from FreeSO submodule dependencies,
-         same as Simitone.Desktop / Simitone.Windows. -->
-    <NoWarn>$(NoWarn);NU1605</NoWarn>
 
     <SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
     <MtouchLink>SdkOnly</MtouchLink>
     <RuntimeIdentifiers>ios-arm64;iossimulator-arm64;iossimulator-x64</RuntimeIdentifiers>
-
-    <!-- Explicitly off: iOS apps use Mono's AOT toolchain (driven by
-         RuntimeIdentifier/MtouchLink above), not .NET Native AOT
-         (PublishAot/ILCompiler), which genuinely doesn't support any iOS RID
-         at all. Without this, the SDK infers PublishAot=true somewhere in
-         RID resolution and then rejects every plain-net9.0 FSO.* library
-         pulled in via ProjectReference with NETSDK1203, even though none of
-         them are being Native-AOT-compiled - a known SDK quirk, see
-         https://github.com/dotnet/runtime/issues/95958. -->
-    <PublishAot>false</PublishAot>
 
     <!-- Not code-signed / not packaged for distribution by default - this is a dev
          scaffold. Signing/provisioning is a per-developer, per-Apple-account concern
@@ -36,16 +23,83 @@
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.11" />
   </ItemGroup>
 
+  <!--
+    Deliberately NOT ProjectReference. dotnet build with a mobile RID
+    (net9.0-ios + RuntimeIdentifier) makes the SDK evaluate every
+    ProjectReference as part of the same RID-targeted build graph and reject
+    plain-net9.0 projects with NETSDK1203 ("Ahead-of-time compilation is not
+    supported for the target runtime identifier") - confirmed not fixable
+    from flags/properties on this project alone: --self-contained, then
+    PublishAot=false, then explicit -p:SelfContained=false were each tried
+    against real CI and produced the byte-identical error every time, so
+    none of them were the actual gate.
+
+    Instead, this mirrors what FreeSO's old (2016-2019) FSO.iOS.csproj
+    actually did: build the shared FSO.*/Simitone.Client libraries once as
+    ordinary net9.0 assemblies (see the "Build shared libraries" CI step in
+    ios-build.yml, or run it locally: `dotnet build
+    Client/Simitone/Simitone.Client/Simitone.Client.csproj -c Debug -f
+    net9.0`), then reference the resulting DLLs directly. MSBuild only
+    triggers the AOT/RID graph check when it has to *build* a project as
+    part of the RID-targeted graph - consuming an already-built assembly
+    doesn't hit that check at all.
+
+    HintPaths assume Simitone.Client.csproj was already built in Debug for
+    net9.0 - its output folder ends up with every dependency DLL below,
+    since Simitone.Client transitively references all of them.
+  -->
   <ItemGroup>
-    <ProjectReference Include="..\..\..\FreeSO\Other\libs\MSDFData\MSDFData.csproj" />
-    <ProjectReference Include="..\..\..\FreeSO\TSOClient\FSO.SimAntics.JIT\FSO.SimAntics.JIT.csproj" />
-    <ProjectReference Include="..\..\..\FreeSO\TSOClient\FSO.UI\FSO.UI.csproj" />
-    <ProjectReference Include="..\..\..\FreeSO\TSOClient\tso.client\FSO.Client.csproj" />
-    <ProjectReference Include="..\..\..\FreeSO\TSOClient\tso.common\FSO.Common.csproj" />
-    <ProjectReference Include="..\..\..\FreeSO\TSOClient\tso.files\FSO.Files.csproj" />
-    <ProjectReference Include="..\..\..\FreeSO\TSOClient\tso.simantics\FSO.SimAntics.csproj" />
-    <ProjectReference Include="..\..\..\FreeSO\TSOClient\tso.world\FSO.LotView.csproj" />
-    <ProjectReference Include="..\Simitone.Client\Simitone.Client.csproj" />
+    <Reference Include="Simitone.Client">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\Simitone.Client.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.Client">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Client.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.Common">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.SimAntics">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.SimAntics.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.SimAntics.JIT">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.SimAntics.JIT.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.UI">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.UI.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.Files">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Files.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.Content">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Content.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.LotView">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.LotView.dll</HintPath>
+    </Reference>
+    <Reference Include="MSDFData">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\MSDFData.dll</HintPath>
+    </Reference>
+    <Reference Include="TargaImagePCL">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\TargaImagePCL.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.Server">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.Server.Clients">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.Clients.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.Server.Common">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.Common.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.Server.Database">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.Database.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.Server.Domain">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.Domain.dll</HintPath>
+    </Reference>
+    <Reference Include="FSO.Server.Protocol">
+      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.Protocol.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>
