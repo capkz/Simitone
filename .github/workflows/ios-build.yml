@@ -29,13 +29,18 @@ jobs:
       # No signing needed for a simulator build - this alone answers the
       # question "does Simitone.iOS actually compile", which is the thing
       # that could not be checked anywhere except a real Mac.
+      #
+      # Deliberately no --self-contained here: AOT/self-contained publishing
+      # is a `dotnet publish` concern. Passing --self-contained to `dotnet
+      # build` made the SDK require AOT support from every plain-net9.0
+      # FSO.* library pulled in via ProjectReference (NETSDK1203), which
+      # they don't have and don't need for a build-only compile check.
       - name: Build for iOS Simulator
         run: >
           dotnet build Client/Simitone/Simitone.iOS/Simitone.iOS.csproj
           -c Debug
           -f net9.0-ios
           -r iossimulator-arm64
-          --self-contained
 
   build-device:
     name: Build & sign (device - installable via sideloading)
