@@ -99,9 +99,12 @@ jobs:
           -r iossimulator-arm64
 
   build-device:
-    name: Build (device, unsigned - for AltStore sideloading)
+    name: Build & sign (device - installable via sideloading)
     runs-on: macos-latest
     needs: build-simulator
+    # Skipped entirely until Apple signing secrets/vars are configured - see
+    # docs/ios-device-signing.md in sims-1-ios-port for what to set up and why.
+    if: ${{ vars.APPLE_TEAM_ID != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -150,24 +153,66 @@ jobs:
           -p:NoWarn=NU1605
           -m:1
 
-      # No Apple certificate/provisioning profile at all: AltServer (not
-      # Xcode, not the paid-only developer.apple.com certificates portal)
-      # resigns the IPA locally using a free Apple ID at install time - that
-      # already-established sideloading path doesn't need this CI pipeline
-      # to produce a signed artifact, only a structurally valid one.
-      # UNVERIFIED: whether the Apple iOS SDK's ArchiveOnBuild target
-      # actually produces a valid .app/.ipa with zero CodesignKey specified,
-      # or whether it hard-requires some signing identity even for an
-      # archive meant to be fully re-signed later - this is exactly what
-      # this run is testing.
-      - name: Build and archive unsigned IPA
+      # CONFIRMED on real CI (run 31597660985): -p:ArchiveOnBuild=true with
+      # -p:CodesignKey= (empty) fails hard - "No valid iOS code signing keys
+      # found in keychain. You need to request a codesigning certificate from
+      # https://developer.apple.com." (Xamarin.Shared.targets(1994,3)). The
+      # theory that AltServer's install-time resigning would let CI skip
+      # signing entirely was wrong: ArchiveOnBuild invokes Apple's own
+      # archive-packaging step, which unconditionally requires a real
+      # codesigning identity present in the keychain before it will produce
+      # an .ipa at all - there's no flag to bypass this, only whether the
+      # identity is a free-tier "Apple Development" cert or a paid one.
+      # That identity does NOT require a paid Developer Program account: a
+      # free Apple ID's Xcode "Personal Team" can generate an "Apple
+      # Development" certificate via Xcode's own Accounts UI (Manage
+      # Certificates), which is a separate, free-tier-accessible flow from
+      # the developer.apple.com web portal (Certificates, Identifiers &
+      # Profiles) that requires paid enrollment - see
+      # docs/ios-device-signing.md for the exact steps.
+      - name: Import signing certificate and provisioning profile
+        env:
+          CERT_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PASSWORD=$(uuidgen)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN_PATH" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          EXISTING_KEYCHAINS=$(security list-keychains -d user | sed 's/[" ]//g')
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
+
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+          echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          PROFILE_UUID=$(security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" | \
+            plutil -extract UUID xml1 -o - - | \
+            sed -n 's/.*<string>\(.*\)<\/string>.*/\1/p')
+          cp "$RUNNER_TEMP/profile.mobileprovision" "$PROFILE_DIR/$PROFILE_UUID.mobileprovision"
+          echo "PROFILE_UUID=$PROFILE_UUID" >> "$GITHUB_ENV"
+
+      - name: Build, sign, and archive IPA
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
         run: >
           dotnet build Client/Simitone/Simitone.iOS/Simitone.iOS.csproj
           -c Release
           -f net9.0-ios
           -r ios-arm64
           -p:ArchiveOnBuild=true
-          -p:CodesignKey=
+          -p:CodesignKey="Apple Development"
+          -p:CodesignProvision="${{ env.PROFILE_UUID }}"
+          -p:CodesignTeamId="${{ env.APPLE_TEAM_ID }}"
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
