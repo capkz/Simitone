@@ -28,7 +28,9 @@ public static class ApplePencilInput
     {
         foreach (var obj in touches)
         {
-            if (obj is not UITouch touch || touch.Type != UITouchType.Pencil)
+            // UITouchType.Stylus is the actual enum member for Apple Pencil
+            // (and other stylus input) - there is no "Pencil" member.
+            if (obj is not UITouch touch || touch.Type != UITouchType.Stylus)
                 continue;
 
             IsPencilActive = touch.Phase is not (UITouchPhase.Ended or UITouchPhase.Cancelled);

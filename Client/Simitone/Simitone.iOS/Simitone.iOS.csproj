@@ -38,67 +38,72 @@
     actually did: build the shared FSO.*/Simitone.Client libraries once as
     ordinary net9.0 assemblies (see the "Build shared libraries" CI step in
     ios-build.yml, or run it locally: `dotnet build
-    Client/Simitone/Simitone.Client/Simitone.Client.csproj -c Debug -f
+    Client/Simitone/Simitone.Desktop/Simitone.Desktop.csproj -c Debug -f
     net9.0`), then reference the resulting DLLs directly. MSBuild only
     triggers the AOT/RID graph check when it has to *build* a project as
     part of the RID-targeted graph - consuming an already-built assembly
     doesn't hit that check at all.
 
-    HintPaths assume Simitone.Client.csproj was already built in Debug for
-    net9.0 - its output folder ends up with every dependency DLL below,
-    since Simitone.Client transitively references all of them.
+    HintPaths assume Simitone.Desktop.csproj was already built in Debug for
+    net9.0 - it's the project used here (rather than Simitone.Client
+    directly) because Simitone.Client.csproj alone doesn't reference
+    FSO.Client/FSO.SimAntics.JIT/MSDFData/TargaImagePCL itself - only the
+    consuming executable (Desktop, Windows, and now iOS) adds those as
+    siblings. Building Simitone.Client alone left FSO.SimAntics.JIT.dll
+    missing (confirmed by a real CI failure), since nothing in its own
+    dependency graph produces it.
   -->
   <ItemGroup>
     <Reference Include="Simitone.Client">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\Simitone.Client.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\Simitone.Client.dll</HintPath>
     </Reference>
     <Reference Include="FSO.Client">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Client.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.Client.dll</HintPath>
     </Reference>
     <Reference Include="FSO.Common">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Common.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.Common.dll</HintPath>
     </Reference>
     <Reference Include="FSO.SimAntics">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.SimAntics.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.SimAntics.dll</HintPath>
     </Reference>
     <Reference Include="FSO.SimAntics.JIT">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.SimAntics.JIT.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.SimAntics.JIT.dll</HintPath>
     </Reference>
     <Reference Include="FSO.UI">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.UI.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.UI.dll</HintPath>
     </Reference>
     <Reference Include="FSO.Files">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Files.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.Files.dll</HintPath>
     </Reference>
     <Reference Include="FSO.Content">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Content.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.Content.dll</HintPath>
     </Reference>
     <Reference Include="FSO.LotView">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.LotView.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.LotView.dll</HintPath>
     </Reference>
     <Reference Include="MSDFData">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\MSDFData.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\MSDFData.dll</HintPath>
     </Reference>
     <Reference Include="TargaImagePCL">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\TargaImagePCL.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\TargaImagePCL.dll</HintPath>
     </Reference>
     <Reference Include="FSO.Server">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.Server.dll</HintPath>
     </Reference>
     <Reference Include="FSO.Server.Clients">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.Clients.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.Server.Clients.dll</HintPath>
     </Reference>
     <Reference Include="FSO.Server.Common">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.Common.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.Server.Common.dll</HintPath>
     </Reference>
     <Reference Include="FSO.Server.Database">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.Database.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.Server.Database.dll</HintPath>
     </Reference>
     <Reference Include="FSO.Server.Domain">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.Domain.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.Server.Domain.dll</HintPath>
     </Reference>
     <Reference Include="FSO.Server.Protocol">
-      <HintPath>..\Simitone.Client\bin\Debug\net9.0\FSO.Server.Protocol.dll</HintPath>
+      <HintPath>..\Simitone.Desktop\bin\Debug\net9.0\FSO.Server.Protocol.dll</HintPath>
     </Reference>
   </ItemGroup>
 

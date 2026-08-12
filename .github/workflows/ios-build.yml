@@ -7,6 +7,7 @@ on:
     paths:
       - "Client/Simitone/Simitone.iOS/**"
       - "Client/Simitone/Simitone.Client/**"
+      - "Client/Simitone/Simitone.Desktop/**"
       - "Client/Simitone/Simitone.Shared/**"
       - ".github/workflows/ios-build.yml"
 
@@ -59,7 +60,7 @@ jobs:
       # assemblies, matching what FreeSO's old FSO.iOS.csproj actually did.
       - name: Build shared libraries (plain net9.0, no RID)
         run: >
-          dotnet build Client/Simitone/Simitone.Client/Simitone.Client.csproj
+          dotnet build Client/Simitone/Simitone.Desktop/Simitone.Desktop.csproj
           -c Debug
           -f net9.0
 
@@ -85,6 +86,12 @@ jobs:
         with:
           submodules: recursive
 
+      # Same Xcode/workload version mismatch applies here as in
+      # build-simulator - see that job's comments for why this exists.
+      - name: Select Xcode 26.5 if available
+        continue-on-error: true
+        run: sudo xcode-select -s /Applications/Xcode_26.5.app/Contents/Developer
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "9.0.x"
@@ -94,7 +101,7 @@ jobs:
 
       - name: Build shared libraries (plain net9.0, no RID)
         run: >
-          dotnet build Client/Simitone/Simitone.Client/Simitone.Client.csproj
+          dotnet build Client/Simitone/Simitone.Desktop/Simitone.Desktop.csproj
           -c Debug
           -f net9.0
 

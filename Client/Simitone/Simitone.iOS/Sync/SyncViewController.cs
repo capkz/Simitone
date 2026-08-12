@@ -24,7 +24,7 @@ public sealed class SyncViewController : UIViewController
     public override void ViewDidLoad()
     {
         base.ViewDidLoad();
-        View!.BackgroundColor = UIColor.SystemBackgroundColor;
+        View!.BackgroundColor = UIColor.SystemBackground;
 
         var title = new UILabel
         {
@@ -37,7 +37,7 @@ public sealed class SyncViewController : UIViewController
         {
             Text = "Looking for the PC Companion tool on your Wi-Fi network...",
             Font = UIFont.SystemFontOfSize(16),
-            TextColor = UIColor.SecondaryLabelColor,
+            TextColor = UIColor.SecondaryLabel,
             Lines = 0,
             TranslatesAutoresizingMaskIntoConstraints = false,
         };
@@ -94,7 +94,7 @@ public sealed class SyncViewController : UIViewController
             field.KeyboardType = UIKeyboardType.NumberPad;
         });
         alert.AddAction(UIAlertAction.Create("Cancel", UIAlertActionStyle.Cancel, null));
-        alert.AddAction(UIAlertAction.Create("Connect", UIAlertActionStyle.Default, _ =>
+        alert.AddAction(UIAlertAction.Create("Connect", UIAlertActionStyle.Default, action =>
         {
             var pin = alert.TextFields![0].Text ?? "";
             _ = StartSyncAsync(pc, pin);
