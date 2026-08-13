@@ -253,21 +253,36 @@ jobs:
           EXISTING_KEYCHAINS=$(security list-keychains -d user | sed 's/[" ]//g')
           security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
 
-          # CONFIRMED on real CI, round 1 of this fix: adding trust via
-          # `sudo security add-trusted-cert -d ... -k
-          # /Library/Keychains/System.keychain` DOES make `security
-          # find-identity -p codesigning` report the cert as valid
-          # immediately afterward (was "0 valid identities found" before
-          # this existed) - but the actual `codesign` binary, invoked by
-          # MSBuild ~20 minutes later at the end of the same `dotnet build`
-          # process, still failed identically: "<hash>: no identity found".
-          # Trying a narrower variant: attach the trust setting directly to
-          # the SAME custom keychain that holds the cert+key pair (no sudo,
-          # no system-wide admin domain) in case codesign's identity
-          # resolution during actual signing consults per-keychain trust
-          # differently than find-identity's listing check does.
-          security add-trusted-cert -r trustRoot -p codeSign \
-            -k "$KEYCHAIN_PATH" "$RUNNER_TEMP/cert.pem"
+          # CONCLUSION after 4 rounds of real CI testing (see PR/commit
+          # history for the full trail): a self-signed, zero-Apple-ID
+          # certificate gets remarkably far - past MSBuild's own signing-
+          # identity resolution, past provisioning-profile matching, through
+          # a full ~20 minute compile/link/AOT build producing a genuine
+          # Simitone.app - but the final `codesign` invocation on that .app
+          # reliably fails with "<hash>: no identity found", and fixing that
+          # is not straightforward:
+          #   - `sudo security add-trusted-cert -d` (system/admin trust
+          #     domain) completes without hanging and makes `security
+          #     find-identity -p codesigning` report the cert valid, but
+          #     `codesign` itself still rejects it ~20 min later at the end
+          #     of the same build.
+          #   - The same command WITHOUT `-d`/`sudo` (user trust domain)
+          #     hangs indefinitely - modifying user-domain trust settings
+          #     triggers an interactive macOS "always trust?" confirmation
+          #     dialog that no headless CI runner can ever dismiss. Do not
+          #     remove `-d`/`sudo` here; a real CI run hung on exactly this
+          #     and had to be manually cancelled.
+          # Verdict: a fully Apple-ID-free CI signing pipeline is not
+          # practically achievable with this approach. Use build-device
+          # instead (a free Xcode "Personal Team" Apple Development
+          # certificate, generated once via Xcode's Accounts UI - not the
+          # paid-only developer.apple.com portal - one-time Mac access only,
+          # e.g. a rented cloud Mac for ~10 minutes) - see
+          # docs/ios-device-signing.md. AltServer/AltServer-Linux still do
+          # all *real* signing at install time either way; this only
+          # affects how CI gets past its own internal packaging checks.
+          sudo security add-trusted-cert -d -r trustRoot -p codeSign \
+            -k /Library/Keychains/System.keychain "$RUNNER_TEMP/cert.pem"
 
           echo "--- find-identity output ---"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
