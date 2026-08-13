@@ -253,22 +253,21 @@ jobs:
           EXISTING_KEYCHAINS=$(security list-keychains -d user | sed 's/[" ]//g')
           security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
 
-          # CONFIRMED on real CI: without this, the full build (compile,
-          # link, AOT - ~20 minutes) succeeds all the way through and
-          # produces Simitone.app, then fails at the very last step:
-          # "/usr/bin/codesign exited with code 1: <hash>: no identity
-          # found" - even though MSBuild's own identity *resolution*
-          # accepted the self-signed cert by name earlier. `codesign`
-          # itself does its own, stricter validity check matching
-          # `security find-identity -p codesigning` (which reported "0
-          # valid identities found" for this same cert, further up in this
-          # step) - self-signed certs aren't trusted for the codeSign
-          # policy by default. Explicitly trusting this cert as its own
-          # root, scoped to the codeSign policy, is the documented fix (the
-          # same technique used for internal/ad-hoc Mac code-signing setups
-          # that don't go through Apple at all).
-          sudo security add-trusted-cert -d -r trustRoot -p codeSign \
-            -k /Library/Keychains/System.keychain "$RUNNER_TEMP/cert.pem"
+          # CONFIRMED on real CI, round 1 of this fix: adding trust via
+          # `sudo security add-trusted-cert -d ... -k
+          # /Library/Keychains/System.keychain` DOES make `security
+          # find-identity -p codesigning` report the cert as valid
+          # immediately afterward (was "0 valid identities found" before
+          # this existed) - but the actual `codesign` binary, invoked by
+          # MSBuild ~20 minutes later at the end of the same `dotnet build`
+          # process, still failed identically: "<hash>: no identity found".
+          # Trying a narrower variant: attach the trust setting directly to
+          # the SAME custom keychain that holds the cert+key pair (no sudo,
+          # no system-wide admin domain) in case codesign's identity
+          # resolution during actual signing consults per-keychain trust
+          # differently than find-identity's listing check does.
+          security add-trusted-cert -r trustRoot -p codeSign \
+            -k "$KEYCHAIN_PATH" "$RUNNER_TEMP/cert.pem"
 
           echo "--- find-identity output ---"
           security find-identity -v -p codesigning "$KEYCHAIN_PATH" || true
